@@ -1,6 +1,5 @@
 namespace TeamSearch.Domain;
 
-/// <summary>Represents a college football team's all-time win record.</summary>
 public sealed class TeamRecord
 {
     public int Id { get; set; }
