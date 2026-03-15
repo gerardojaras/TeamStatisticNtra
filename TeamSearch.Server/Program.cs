@@ -1,8 +1,20 @@
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+// Configure EF Core DbContext (SQLite) from Infrastructure
+var connectionString = builder.Configuration.GetConnectionString("Default") ?? "Data Source=teamsearch.db";
+builder.Services.AddDbContext<TeamSearch.Infrastructure.TeamSearchDbContext>(options =>
+{
+    options.UseSqlite(connectionString, sql => sql.MigrationsAssembly("TeamSearch.Infrastructure"));
+});
+
+// Register repositories
+builder.Services.AddScoped<TeamSearch.Infrastructure.Repositories.TeamRecordRepository>();
 
 var app = builder.Build();
 
