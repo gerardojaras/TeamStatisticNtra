@@ -42,8 +42,8 @@ public class TeamRecordService(ITeamRecordRepository repo) : ITeamRecordService
         {
             Id = e.Id,
             Rank = e.Rank,
-            Team = e.Team,
-            Mascot = e.Mascot,
+            Team = e.Team?.Trim() ?? string.Empty,
+            Mascot = e.Mascot?.Trim(),
             DateOfLastWin = e.DateOfLastWin,
             WinningPercentage = e.WinningPercentage,
             Wins = e.Wins,
@@ -51,12 +51,12 @@ public class TeamRecordService(ITeamRecordRepository repo) : ITeamRecordService
             Ties = e.Ties,
             Games = e.Games,
             CreatedAt = e.CreatedAt,
-            CreatedBy = e.CreatedBy,
+            CreatedBy = e.CreatedBy?.Trim(),
             LastModifiedAt = e.LastModifiedAt,
-            LastModifiedBy = e.LastModifiedBy,
+            LastModifiedBy = e.LastModifiedBy?.Trim(),
             IsDeleted = e.IsDeleted,
             DeletedAt = e.DeletedAt,
-            DeletedBy = e.DeletedBy
+            DeletedBy = e.DeletedBy?.Trim()
         };
     }
 }

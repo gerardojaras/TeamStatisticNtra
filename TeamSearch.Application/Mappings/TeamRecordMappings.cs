@@ -11,8 +11,8 @@ public static class TeamRecordMappings
         {
             Id = src.Id,
             Rank = src.Rank,
-            Team = src.Team,
-            Mascot = src.Mascot,
+            Team = src.Team?.Trim() ?? string.Empty,
+            Mascot = src.Mascot?.Trim(),
             DateOfLastWin = src.DateOfLastWin,
             WinningPercentage = src.WinningPercentage,
             Wins = src.Wins,
