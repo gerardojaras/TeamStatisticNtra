@@ -24,6 +24,18 @@ builder.Services.AddDbContextFactory<TeamSearchDbContext>(options =>
 
 builder.Services.AddControllers();
 
+// Allow the local Blazor WASM dev origin to call this API
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("BlazorClient", policy =>
+    {
+        policy
+            .WithOrigins("https://localhost:7114")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 var app = builder.Build();
 
 app.MapOpenApi();
@@ -31,6 +43,8 @@ app.MapOpenApi();
 app.UseHttpsRedirection();
 
 app.UseRouting();
+
+app.UseCors("BlazorClient");
 
 app.UseAuthorization();
 

@@ -1,39 +1,64 @@
-# List - default (first page, default pageSize)
-GET https://localhost:7216/TeamRecords
+
+# List: default (Id asc)
+https://localhost:7216/TeamRecords?search=ohio&Fields=Id%2CTeam%2CMascot%2CWins%2CWinningPercentage%2CCreatedAt&page=1&pageSize=20&sortDir=asc
 Accept: application/json
 
 ###
 
-# List - with text filter (matches Team or Mascot) and explicit paging
-GET https://localhost:7216/TeamRecords?q=Ohio&page=1&pageSize=10
+# List: filter by Team or Mascot
+GET https://localhost:7216/TeamRecords?search=Ohio&page=1&pageSize=20
 Accept: application/json
 
 ###
 
-# List - example with spaces / URL encoding (search for "State University")
-GET https://localhost:7216/TeamRecords?q=State%20University&page=1&pageSize=5
+# List: space-encoded query example
+GET https://localhost:7216/TeamRecords?search=Scarlet%20Knights&page=1&pageSize=5
 Accept: application/json
 
 ###
 
-# Get - single record (replace 1 with an actual id from your DB)
+# Search: tokens; '-'/'!' = exclude (applied first). Fields restrict columns (default: Team,Mascot)
+
+# List: restrict searchable fields
+GET https://localhost:7216/TeamRecords?search=seeder&Fields=CreatedBy&page=1&pageSize=10
+Accept: application/json
+
+###
+
+# Ordering: fields: Id,Team,Mascot,Rank,Wins,WinningPercentage,CreatedAt. sortDir=asc|desc
+
+# List: order by Team asc
+GET https://localhost:7216/TeamRecords?sortBy=team&sortDir=asc&page=1&pageSize=10
+Accept: application/json
+
+###
+
+# List: order by Wins desc
+GET https://localhost:7216/TeamRecords?sortBy=wins&sortDir=desc&page=1&pageSize=10
+Accept: application/json
+
+###
+
+# List: combined example (search + fields + order)
+GET https://localhost:7216/TeamRecords?search=Scarlet%20Knights&Fields=Team,CreatedBy&page=1&pageSize=5&
+    sortBy=winningPercentage&sortDir=desc
+Accept: application/json
+
+###
+
+# Get by id
 GET https://localhost:7216/TeamRecords/1
 Accept: application/json
 
 ###
 
-# Get - not found example (returns 200 with Success = false in ApiResponse)
+# Not found -> Success=false
 GET https://localhost:7216/TeamRecords/999999
 Accept: application/json
 
 ###
 
-# Quick curl examples (run in PowerShell or bash) - replace host and id as needed
-# curl - list first page
+# Examples (bash / PowerShell)
 # curl -s "https://localhost:7216/TeamRecords" -H "Accept: application/json" | jq
-# curl - list with filter and paging
-# curl -s "https://localhost:7216/TeamRecords?q=Ohio&page=2&pageSize=5" -H "Accept: application/json" | jq
-# curl - get by id
-# curl -s "https://localhost:7216/TeamRecords/1" -H "Accept: application/json" | jq
-
-
+# curl -s "https://localhost:7216/TeamRecords?search=Ohio&page=2&pageSize=5&Fields=Team&sortBy=team&sortDir=asc" -H "Accept: application/json" | jq
+# PowerShell: Invoke-RestMethod -Uri "https://localhost:7216/TeamRecords?search=Ohio&page=1&pageSize=5&Fields=Team&sortBy=wins&sortDir=desc" -UseBasicParsing

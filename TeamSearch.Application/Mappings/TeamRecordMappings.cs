@@ -19,7 +19,13 @@ public static class TeamRecordMappings
             Losses = src.Losses,
             Ties = src.Ties,
             Games = src.Games,
+            CreatedAt = src.CreatedAt,
+            CreatedBy = src.CreatedBy?.Trim(),
+            LastModifiedAt = src.LastModifiedAt,
+            LastModifiedBy = src.LastModifiedBy?.Trim(),
+            IsDeleted = src.IsDeleted,
+            DeletedAt = src.DeletedAt,
+            DeletedBy = src.DeletedBy?.Trim()
         };
     }
 }
-

@@ -19,13 +19,13 @@ public class TeamRecordsController : ControllerBase
     [HttpGet]
     [Produces("application/json")]
     [ProducesResponseType(typeof(ApiResponse<List<TeamRecordDto>>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ApiResponse<List<TeamRecordDto>>>> List([FromQuery] string? q,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<ApiResponse<List<TeamRecordDto>>>> List([FromQuery] TeamRecordQuery query,
+        CancellationToken cancellationToken = default)
     {
-        var list = await _service.ListAsync(q, page, pageSize, cancellationToken).ConfigureAwait(false);
+        var q = query ?? new TeamRecordQuery();
+        var list = await _service.ListAsync(q, cancellationToken).ConfigureAwait(false);
         var total = await _service.CountAsync(q, cancellationToken).ConfigureAwait(false);
-        var meta = new { total, page, pageSize };
+        var meta = new { total, page = q.Page, pageSize = q.PageSize };
         return Ok(ApiResponse<List<TeamRecordDto>>.SuccessResponse(list, meta));
     }
 

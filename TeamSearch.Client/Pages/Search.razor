@@ -1,0 +1,285 @@
+@page "/search"
+@using TeamSearch.Client.Services
+@using TeamSearch.Shared.Dtos
+@inject ITeamRecordClient TeamClient
+
+<h3>Team Records Search</h3>
+
+<div class="mb-3">
+    <label class="form-label">Search</label>
+    <input class="form-control" value="@SearchText" @oninput="OnSearchInput"
+           placeholder="Enter search text (e.g. Ohio or Scarlet Knights)"/>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-6">
+        <label class="form-label">Sort by</label>
+        <select class="form-select" @bind="SortBy">
+            <option value="">(none)</option>
+            @foreach (var kvp in AllColumns)
+            {
+                <option value="@kvp.Key">@kvp.Value</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label class="form-label">Direction</label>
+        <select class="form-select" @bind="SortDir">
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+        </select>
+    </div>
+    <div class="col-md-3 d-flex align-items-end">
+        <button class="btn btn-outline-secondary w-100" @onclick="ToggleSortDirection">Toggle Direction</button>
+    </div>
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Fields to return</label>
+    <div class="form-check" style="max-height:160px;overflow:auto;">
+        @foreach (var kvp in AllColumns)
+        {
+            <div>
+                <input class="form-check-input" type="checkbox" id="fld_@kvp.Key"
+                       checked="@SelectedColumns.Contains(kvp.Key)" @onclick="() => ToggleColumn(kvp.Key)"/>
+                <label class="form-check-label" for="fld_@kvp.Key">@kvp.Value</label>
+            </div>
+        }
+    </div>
+</div>
+
+<div class="mb-3">
+    <button class="btn btn-primary me-2" @onclick="() => PerformSearch()">Search</button>
+    <button class="btn btn-secondary" @onclick="Clear">Clear</button>
+</div>
+
+@if (IsLoading)
+{
+    <div class="alert alert-info">Loading...</div>
+}
+else if (ErrorMessage is not null)
+{
+    <div class="alert alert-danger">@ErrorMessage</div>
+}
+else
+{
+    <div>
+        <table class="table table-striped">
+            <thead>
+            <tr>
+                @foreach (var key in VisibleColumnKeys)
+                {
+                    <th style="cursor:pointer;user-select:none" @onclick="() => HeaderClicked(key)">
+                        @AllColumns[key]
+                        @if (SortBy == key)
+                        {
+                            <span> @(SortDir == "asc" ? "↑" : "↓")</span>
+                        }
+                    </th>
+                }
+            </tr>
+            </thead>
+            <tbody>
+            @if (Results?.Any() ?? false)
+            {
+                foreach (var r in Results)
+                {
+                    <tr>
+                        @foreach (var key in VisibleColumnKeys)
+                        {
+                            <td>@GetColumnString(r, key)</td>
+                        }
+                    </tr>
+                }
+            }
+            else
+            {
+                <tr>
+                    <td colspan="@VisibleColumnKeys.Count()">No results</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+
+        <div class="d-flex justify-content-between align-items-center">
+            <div>Showing @(Results?.Count() ?? 0) result(s)</div>
+            <div>
+                <button class="btn btn-light me-1" @onclick="() => PrevPage()" disabled="@(Page <= 1)">Prev</button>
+                <span class="mx-2">Page @Page</span>
+                <button class="btn btn-light" @onclick="() => NextPage()">Next</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+
+    private CancellationTokenSource? _debounceCts;
+
+    // Query state
+    private string? SearchText { get; set; }
+    private int Page { get; set; } = 1;
+    private int PageSize { get; } = 20;
+
+    // Sorting
+    private string? SortBy { get; set; }
+    private string SortDir { get; set; } = "asc";
+
+    // Columns & selection: key = property name, value = display name
+    private readonly Dictionary<string, string> AllColumns = new()
+    {
+        ["Id"] = "ID",
+        ["Rank"] = "Rank",
+        ["Team"] = "Team",
+        ["Mascot"] = "Mascot",
+        ["DateOfLastWin"] = "Date of Last Win",
+        ["WinningPercentage"] = "Winning %",
+        ["Wins"] = "Wins",
+        ["Losses"] = "Losses",
+        ["Ties"] = "Ties",
+        ["Games"] = "Games"
+    };
+
+    private HashSet<string> SelectedColumns { get; set; } = new();
+
+    // Results
+    private List<TeamRecordDto>? Results { get; set; }
+    private bool IsLoading { get; set; }
+    private string? ErrorMessage { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // default selected columns
+        SelectedColumns = new HashSet<string>(new[] { "Id", "Team", "Mascot", "Wins", "WinningPercentage", "CreatedAt" });
+    }
+
+    IEnumerable<string> VisibleColumnKeys => AllColumns.Keys.Where(c => SelectedColumns.Contains(c));
+
+    void ToggleColumn(string col)
+    {
+        if (SelectedColumns.Contains(col)) SelectedColumns.Remove(col);
+        else SelectedColumns.Add(col);
+    }
+
+    void ToggleSortDirection()
+    {
+        SortDir = SortDir == "asc" ? "desc" : "asc";
+    }
+
+    async Task HeaderClicked(string key)
+    {
+        if (SortBy == key)
+        {
+            ToggleSortDirection();
+        }
+        else
+        {
+            SortBy = key;
+            SortDir = "asc";
+        }
+
+        await PerformSearch();
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        SearchText = e?.Value?.ToString();
+        _debounceCts?.Cancel();
+        _debounceCts = new CancellationTokenSource();
+        var token = _debounceCts.Token;
+        try
+        {
+            await Task.Delay(300, token);
+            if (!token.IsCancellationRequested)
+            {
+                Page = 1;
+                await PerformSearch(token);
+            }
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    string GetColumnString(TeamRecordDto r, string col)
+    {
+        return col switch
+        {
+            "Id" => r.Id.ToString(),
+            "Rank" => r.Rank?.ToString() ?? string.Empty,
+            "Team" => r.Team,
+            "Mascot" => r.Mascot ?? string.Empty,
+            "DateOfLastWin" => r.DateOfLastWin?.ToString("yyyy-MM-dd") ?? string.Empty,
+            "WinningPercentage" => r.WinningPercentage?.ToString() ?? string.Empty,
+            "Wins" => r.Wins?.ToString() ?? string.Empty,
+            "Losses" => r.Losses?.ToString() ?? string.Empty,
+            "Ties" => r.Ties?.ToString() ?? string.Empty,
+            "Games" => r.Games?.ToString() ?? string.Empty,
+            "CreatedAt" => r.CreatedAt.ToString("yyyy-MM-dd"),
+            "CreatedBy" => r.CreatedBy ?? string.Empty,
+            "LastModifiedAt" => r.LastModifiedAt?.ToString("yyyy-MM-dd") ?? string.Empty,
+            "LastModifiedBy" => r.LastModifiedBy ?? string.Empty,
+            "IsDeleted" => r.IsDeleted ? "Yes" : "No",
+            "DeletedAt" => r.DeletedAt?.ToString("yyyy-MM-dd") ?? string.Empty,
+            "DeletedBy" => r.DeletedBy ?? string.Empty,
+            _ => string.Empty
+        };
+    }
+
+    async Task PerformSearch(CancellationToken cancellationToken = default)
+    {
+        IsLoading = true;
+        ErrorMessage = null;
+        try
+        {
+            var fields = string.Join(',', SelectedColumns);
+            var apiResp = await TeamClient.ListAsync(SearchText, fields, Page, PageSize, SortBy, SortDir, cancellationToken);
+            if (!apiResp.Success)
+            {
+                ErrorMessage = apiResp.Error?.Message ?? "Unknown error";
+                Results = new List<TeamRecordDto>();
+            }
+            else
+            {
+                Results = apiResp.Data ?? new List<TeamRecordDto>();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            /* ignore */
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            Results = new List<TeamRecordDto>();
+        }
+        finally
+        {
+            IsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    void Clear()
+    {
+        SearchText = string.Empty;
+        Page = 1;
+        SelectedColumns = new HashSet<string>(new[] { "Id", "Team", "Mascot", "Wins", "WinningPercentage", "CreatedAt" });
+        SortBy = null;
+        SortDir = "asc";
+        Results = new List<TeamRecordDto>();
+    }
+
+    async Task NextPage()
+    {
+        Page++;
+        await PerformSearch();
+    }
+
+    async Task PrevPage()
+    {
+        if (Page > 1) Page--;
+        await PerformSearch();
+    }
+
+}
