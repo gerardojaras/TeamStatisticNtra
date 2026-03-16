@@ -1,6 +1,39 @@
-@TeamSearch.Server_HostAddress = http://localhost:5149
-
-GET {{TeamSearch.Server_HostAddress}}/weatherforecast/
+# List - default (first page, default pageSize)
+GET https://localhost:7216/TeamRecords
 Accept: application/json
 
 ###
+
+# List - with text filter (matches Team or Mascot) and explicit paging
+GET https://localhost:7216/TeamRecords?q=Ohio&page=1&pageSize=10
+Accept: application/json
+
+###
+
+# List - example with spaces / URL encoding (search for "State University")
+GET https://localhost:7216/TeamRecords?q=State%20University&page=1&pageSize=5
+Accept: application/json
+
+###
+
+# Get - single record (replace 1 with an actual id from your DB)
+GET https://localhost:7216/TeamRecords/1
+Accept: application/json
+
+###
+
+# Get - not found example (returns 200 with Success = false in ApiResponse)
+GET https://localhost:7216/TeamRecords/999999
+Accept: application/json
+
+###
+
+# Quick curl examples (run in PowerShell or bash) - replace host and id as needed
+# curl - list first page
+# curl -s "https://localhost:7216/TeamRecords" -H "Accept: application/json" | jq
+# curl - list with filter and paging
+# curl -s "https://localhost:7216/TeamRecords?q=Ohio&page=2&pageSize=5" -H "Accept: application/json" | jq
+# curl - get by id
+# curl -s "https://localhost:7216/TeamRecords/1" -H "Accept: application/json" | jq
+
+

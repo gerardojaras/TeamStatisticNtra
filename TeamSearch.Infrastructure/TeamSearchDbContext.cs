@@ -42,6 +42,8 @@ public class TeamSearchDbContext(DbContextOptions<TeamSearchDbContext> options) 
             b.Property(t => t.IsDeleted).HasDefaultValue(false);
             b.Property(t => t.DeletedAt);
             b.Property(t => t.DeletedBy).HasMaxLength(200);
+            // Add an index on Team + Mascot to speed up lookups that filter or sort by these columns.
+            b.HasIndex(t => new { t.Team, t.Mascot }).HasDatabaseName("IX_TeamRecords_Team_Mascot");
             b.HasQueryFilter(t => !t.IsDeleted);
         });
     }

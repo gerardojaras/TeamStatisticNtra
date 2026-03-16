@@ -22,6 +22,7 @@ var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((ctx, services) =>
     {
         var connectionString = ctx.Configuration.GetConnectionString("Default") ?? "Data Source=teamsearch.db";
+        connectionString = TeamSearch.Infrastructure.Utilities.SqliteConnectionStringResolver.Resolve(connectionString);
 
         // Create and open a shared SqliteConnection so we can configure PRAGMA settings
         // (busy_timeout) before EF Core runs migrations. Register the connection as a
@@ -39,7 +40,9 @@ var host = Host.CreateDefaultBuilder(args)
         }
 
         services.AddSingleton(sqliteConnection);
-        services.AddDbContext<TeamSearchDbContext>(options =>
+        // Register an IDbContextFactory so the seeder can create short-lived
+        // TeamSearchDbContext instances while still using the shared SqliteConnection
+        services.AddDbContextFactory<TeamSearchDbContext>(options =>
             options.UseSqlite(sqliteConnection, sql => sql.MigrationsAssembly("TeamSearch.Infrastructure")));
     })
     .Build();
@@ -47,7 +50,8 @@ var host = Host.CreateDefaultBuilder(args)
 try
 {
     using var scope = host.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<TeamSearchDbContext>();
+    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<TeamSearchDbContext>>();
+    await using var db = dbFactory.CreateDbContext();
 
     var argList = args?.ToList() ?? new List<string>();
     var dryRun = argList.Contains("--dry-run") || argList.Contains("-n");
@@ -55,7 +59,7 @@ try
     var csvPath = positional.ElementAtOrDefault(0) ?? "data/CollegeFootballTeamWinsWithMascots.csv";
     var importerUserId = positional.ElementAtOrDefault(1) ?? "seeder";
 
-    if (!dryRun) db.Database.Migrate();
+    if (!dryRun) await db.Database.MigrateAsync();
 
     var processed = 0;
     var inserted = 0;
@@ -125,7 +129,12 @@ try
 
     db.ChangeTracker.AutoDetectChangesEnabled = autoDetect;
 
-    // Silent exit on success - no console output
+    // Print a brief summary when running in dry-run mode so users can see simulated results.
+    if (dryRun)
+    {
+        Console.WriteLine($"Dry run summary: processed={processed}, inserted={inserted}, updated={updated}");
+    }
+    // Silent exit on success for non-dry-run runs
     Environment.ExitCode = 0;
 }
 catch
@@ -144,3 +153,4 @@ finally
     // Ensure process exits immediately after cleanup
     Environment.Exit(Environment.ExitCode);
 }
+

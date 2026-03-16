@@ -81,6 +81,9 @@ namespace TeamSearch.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Team", "Mascot")
+                        .HasDatabaseName("IX_TeamRecords_Team_Mascot");
+
                     b.ToTable("TeamRecords", (string)null);
                 });
 #pragma warning restore 612, 618

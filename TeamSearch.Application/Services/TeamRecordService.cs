@@ -14,13 +14,19 @@ public class TeamRecordService(ITeamRecordRepository repo) : ITeamRecordService
         return entity == null ? null : Map(entity);
     }
 
-    public async Task<List<TeamRecordDto>> ListAsync(CancellationToken cancellationToken = default)
+    public async Task<List<TeamRecordDto>> ListAsync(string? q = null, int page = 1, int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
-        var list = await _repo.ListAsync(cancellationToken).ConfigureAwait(false);
+        var list = await _repo.ListAsync(q, page, pageSize, cancellationToken).ConfigureAwait(false);
         return list.Select(Map).ToList();
     }
 
-    public Task<bool> RestoreAsync(int id, string performedBy, CancellationToken cancellationToken = default)
+    public Task<int> CountAsync(string? q = null, CancellationToken cancellationToken = default)
+    {
+        return _repo.CountAsync(q, cancellationToken);
+    }
+
+    public Task<bool> RestoreAsync(int id, string? performedBy, CancellationToken cancellationToken = default)
     {
         return _repo.RestoreAsync(id, performedBy, cancellationToken);
     }
