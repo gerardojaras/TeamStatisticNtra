@@ -1,0 +1,146 @@
+﻿using System.Globalization;
+using CsvHelper;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using TeamSearch.Domain;
+using TeamSearch.Infrastructure;
+using TeamSearch.Seeder;
+using TeamSearch.Shared.Dtos;
+
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureLogging((ctx, logging) =>
+    {
+        // Reduce log noise so seeder runs silently for normal operation
+        logging.ClearProviders();
+        logging.AddFilter("Microsoft", LogLevel.Warning);
+        logging.AddFilter("System", LogLevel.Warning);
+    })
+    .ConfigureServices((ctx, services) =>
+    {
+        var connectionString = ctx.Configuration.GetConnectionString("Default") ?? "Data Source=teamsearch.db";
+
+        // Create and open a shared SqliteConnection so we can configure PRAGMA settings
+        // (busy_timeout) before EF Core runs migrations. Register the connection as a
+        // singleton so it stays open for the lifetime of the host.
+        var sqliteConnection = new SqliteConnection(connectionString);
+        sqliteConnection.Open();
+        using (var cmd = sqliteConnection.CreateCommand())
+        {
+            // Set busy timeout to 200ms so SQLite waits a little instead of failing quickly.
+            cmd.CommandText = "PRAGMA busy_timeout = 200;";
+            cmd.ExecuteNonQuery();
+            // Use WAL journal mode to improve concurrent read/write behavior.
+            cmd.CommandText = "PRAGMA journal_mode = WAL;";
+            cmd.ExecuteNonQuery();
+        }
+
+        services.AddSingleton(sqliteConnection);
+        services.AddDbContext<TeamSearchDbContext>(options =>
+            options.UseSqlite(sqliteConnection, sql => sql.MigrationsAssembly("TeamSearch.Infrastructure")));
+    })
+    .Build();
+
+try
+{
+    using var scope = host.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<TeamSearchDbContext>();
+
+    var argList = args?.ToList() ?? new List<string>();
+    var dryRun = argList.Contains("--dry-run") || argList.Contains("-n");
+    var positional = argList.Where(a => !a.StartsWith("-"));
+    var csvPath = positional.ElementAtOrDefault(0) ?? "data/CollegeFootballTeamWinsWithMascots.csv";
+    var importerUserId = positional.ElementAtOrDefault(1) ?? "seeder";
+
+    if (!dryRun) db.Database.Migrate();
+
+    var processed = 0;
+    var inserted = 0;
+    var updated = 0;
+
+    using var reader = new StreamReader(csvPath);
+    using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+    csv.Context.RegisterClassMap<CsvTeamRecordMap>();
+
+    var records = csv.GetRecords<CsvTeamRecord>();
+
+    var autoDetect = db.ChangeTracker.AutoDetectChangesEnabled;
+    db.ChangeTracker.AutoDetectChangesEnabled = false;
+
+    await foreach (var r in records.ToAsyncEnumerable())
+    {
+        processed++;
+
+
+        if (dryRun)
+        {
+            inserted++;
+        }
+        else
+        {
+            var existing = await db.TeamRecordsWithDeleted().FirstOrDefaultAsync(t => t.Team == r.Team);
+            if (existing != null)
+            {
+                existing.Rank = r.Rank;
+                existing.Mascot = r.Mascot;
+                existing.DateOfLastWin = r.DateOfLastWin;
+                existing.WinningPercentage = r.WinningPercentage;
+                existing.Wins = r.Wins;
+                existing.Losses = r.Losses;
+                existing.Ties = r.Ties;
+                existing.Games = r.Games;
+                existing.LastModifiedAt = DateTime.UtcNow;
+                existing.LastModifiedBy = importerUserId;
+                updated++;
+            }
+            else
+            {
+                var entity = new TeamRecord
+                {
+                    Team = r.Team,
+                    Rank = r.Rank,
+                    Mascot = r.Mascot,
+                    DateOfLastWin = r.DateOfLastWin,
+                    WinningPercentage = r.WinningPercentage,
+                    Wins = r.Wins,
+                    Losses = r.Losses,
+                    Ties = r.Ties,
+                    Games = r.Games,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = importerUserId
+                };
+                db.TeamRecords.Add(entity);
+                inserted++;
+            }
+        }
+    }
+
+    // Save all changes once at the end (small dataset)
+    db.CurrentUserId = importerUserId;
+    await db.SaveChangesAsync();
+    db.ChangeTracker.Clear();
+
+    db.ChangeTracker.AutoDetectChangesEnabled = autoDetect;
+
+    // Silent exit on success - no console output
+    Environment.ExitCode = 0;
+}
+catch
+{
+    // Fail silently (non-zero exit code) — no console output
+    Environment.ExitCode = 1;
+}
+finally
+{
+    try
+    {
+        await host.StopAsync();
+    }
+    catch { }
+    host.Dispose();
+    // Ensure process exits immediately after cleanup
+    Environment.Exit(Environment.ExitCode);
+}

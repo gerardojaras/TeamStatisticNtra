@@ -3,6 +3,7 @@
   <Project Path="TeamSearch.Client/TeamSearch.Client.csproj" />
   <Project Path="TeamSearch.Domain/TeamSearch.Domain.csproj" />
   <Project Path="TeamSearch.Infrastructure/TeamSearch.Infrastructure.csproj" />
+  <Project Path="TeamSearch.Seeder/TeamSearch.Seeder.csproj" />
   <Project Path="TeamSearch.Server/TeamSearch.Server.csproj" />
   <Project Path="TeamSearch.Shared/TeamSearch.Shared.csproj" />
   <Project Path="TeamSearch.Tests/TeamSearch.Tests.csproj" />

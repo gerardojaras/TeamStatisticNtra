@@ -1,28 +1,25 @@
 using Microsoft.EntityFrameworkCore;
+using TeamSearch.Application.Repositories;
+using TeamSearch.Application.Services;
+using TeamSearch.Infrastructure;
+using TeamSearch.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-// Configure EF Core DbContext (SQLite) from Infrastructure
 var connectionString = builder.Configuration.GetConnectionString("Default") ?? "Data Source=teamsearch.db";
-builder.Services.AddDbContext<TeamSearch.Infrastructure.TeamSearchDbContext>(options =>
+builder.Services.AddDbContext<TeamSearchDbContext>(options =>
 {
     options.UseSqlite(connectionString, sql => sql.MigrationsAssembly("TeamSearch.Infrastructure"));
 });
 
-// Register repositories
-builder.Services.AddScoped<TeamSearch.Infrastructure.Repositories.TeamRecordRepository>();
+builder.Services.AddScoped<ITeamRecordRepository, TeamRecordRepository>();
+builder.Services.AddScoped<ITeamRecordService, TeamRecordService>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
+if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
 app.UseHttpsRedirection();
 
@@ -32,22 +29,22 @@ var summaries = new[]
 };
 
 app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+    {
+        var forecast = Enumerable.Range(1, 5).Select(index =>
+                new WeatherForecast
+                (
+                    DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
+                    Random.Shared.Next(-20, 55),
+                    summaries[Random.Shared.Next(summaries.Length)]
+                ))
+            .ToArray();
+        return forecast;
+    })
+    .WithName("GetWeatherForecast");
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 {
     public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
 }
