@@ -102,16 +102,15 @@ dotnet publish ./TeamSearch.Client -c Release -o ./publish/client
 
 ## Troubleshooting
 
-- Database locked: ensure no other process holds an exclusive lock. The seeder sets `PRAGMA journal_mode=WAL` and a small busy timeout to reduce contention.
-- `dotnet ef` fails: ensure `dotnet-ef` tool is installed and your .NET SDK matches the project target.
-- CORS: when running client and server separately, the server allows the local dev origin `https://localhost:7114` by default. If you changed ports, update the CORS policy in `TeamSearch.Server/Program.cs` or set `ApiBaseUrl` accordingly.
-- HTTPS dev cert: if the browser blocks the local HTTPS dev certificate, run:
+- Database locked: if migration or seeding fails, the SQLite file is likely locked by another process (for example an already running API/seeder instance or an open DB browser). Stop those processes and run the command again. The seeder sets `PRAGMA journal_mode=WAL` and a small busy timeout to reduce contention.
+- Migration may fail when DB is locked: `dotnet ef database update` and startup auto-migration can fail until the lock is released. If this happens, stop any process using the DB, then retry.
+
+### Quick unlock checklist (PowerShell)
 
 ```powershell
-dotnet dev-certs https --trust
-```
+# 1) Stop running app/seeder processes that may hold the SQLite file
+Get-Process dotnet -ErrorAction SilentlyContinue | Stop-Process -Force
 
-## Notes
+# 2) Optional: close DB Browser/SQLite tools manually if open
 
-- Projects target `net10.0` — verify your SDK version.
-- The seeder is quiet on success; use `--dry-run` to preview the import.
+# 3)
