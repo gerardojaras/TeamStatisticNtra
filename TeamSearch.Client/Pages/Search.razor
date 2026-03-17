@@ -53,7 +53,7 @@ else
                         RefreshItems="OnGridRefreshAsync">
             @foreach (var key in VisibleColumnKeys)
             {
-                var colKey = key; // capture for closure
+                var colKey = key;
                 <TemplateColumn Title="@PresentationService.AllColumns[colKey]"
                                 SortBy="@PresentationService.GetSortExpression(colKey)">
                     @PresentationService.GetColumnString(context, colKey)
@@ -169,7 +169,7 @@ else
             var apiResp = await TeamClient.ListAsync(SearchText, fields, Page, PageSize, SortBy, SortDir, cancellationToken);
             if (!apiResp.Success)
             {
-                ErrorMessage = apiResp.Error?.Message ?? "Unknown error";
+                ErrorMessage = BuildFriendlyErrorMessage(apiResp.Error?.Code, apiResp.Error?.Message);
                 Results = [];
             }
             else
@@ -182,7 +182,7 @@ else
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = BuildFriendlyErrorMessage(null, ex.Message);
             Results = [];
         }
         finally
@@ -190,6 +190,36 @@ else
             IsLoading = false;
             StateHasChanged();
         }
+    }
+
+    private static string BuildFriendlyErrorMessage(string? errorCode, string? rawErrorMessage)
+    {
+        if (string.Equals(errorCode, "http_error", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(errorCode, "read_error", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(errorCode, "unexpected_html", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(errorCode, "invalid_json", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(errorCode, "invalid_response", StringComparison.OrdinalIgnoreCase) ||
+            ContainsConnectionKeyword(rawErrorMessage))
+        {
+            return "There was a connection error running the database request. Please make sure the API and database are running, then try again.";
+        }
+
+        return string.IsNullOrWhiteSpace(rawErrorMessage)
+            ? "Something went wrong while loading records."
+            : rawErrorMessage;
+    }
+
+    private static bool ContainsConnectionKeyword(string? rawErrorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(rawErrorMessage))
+        {
+            return false;
+        }
+
+        return rawErrorMessage.Contains("connection", StringComparison.OrdinalIgnoreCase) ||
+               rawErrorMessage.Contains("database", StringComparison.OrdinalIgnoreCase) ||
+               rawErrorMessage.Contains("sqlite", StringComparison.OrdinalIgnoreCase) ||
+               rawErrorMessage.Contains("network", StringComparison.OrdinalIgnoreCase);
     }
 
     void Clear()

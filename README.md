@@ -47,10 +47,17 @@ dotnet restore
 2) Apply migrations & seed data (recommended):
 
 ```powershell
+# migrations are applied by default
 dotnet run --project ./TeamSearch.Seeder -- data/CollegeFootballTeamWinsWithMascots.csv seeder
 ```
 
-Use `--dry-run` (or `-n`) to preview the import without applying migrations or writing data.
+`--migrate` is available if you want to be explicit (same default behavior):
+
+```powershell
+dotnet run --project ./TeamSearch.Seeder -- data/CollegeFootballTeamWinsWithMascots.csv seeder --migrate
+```
+
+Use `--dry-run` (or `-n`) to preview the import without writing data.
 
 3) Run the server (recommended to start first):
 
@@ -113,4 +120,25 @@ Get-Process dotnet -ErrorAction SilentlyContinue | Stop-Process -Force
 
 # 2) Optional: close DB Browser/SQLite tools manually if open
 
-# 3)
+# 3) Retry migration/update
+cd ./TeamSearch.Server
+dotnet ef database update
+
+# 4) Retry seeding (migrate is default; --migrate shown for explicitness)
+cd ..
+dotnet run --project ./TeamSearch.Seeder -- data/CollegeFootballTeamWinsWithMascots.csv seeder --migrate
+```
+
+- `dotnet ef` fails: ensure `dotnet-ef` tool is installed and your .NET SDK matches the project target.
+- CORS: when running client and server separately, the server allows the local dev origin `https://localhost:7114` by default. If you changed ports, update the CORS policy in `TeamSearch.Server/Program.cs` or set `ApiBaseUrl` accordingly.
+- HTTPS dev cert: if the browser blocks the local HTTPS dev certificate, run:
+
+```powershell
+dotnet dev-certs https --trust
+```
+
+## Notes
+
+- Projects target `net10.0` - verify your SDK version.
+- The seeder is quiet on success; use `--dry-run` to preview the import.
+- Migrations run by default in the seeder; `--migrate` is an explicit equivalent switch.
