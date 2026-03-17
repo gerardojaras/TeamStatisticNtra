@@ -35,9 +35,12 @@ public class TeamRecordRepository(IDbContextFactory<TeamSearchDbContext> factory
         var entity = await db.FindTeamRecordIncludingDeletedAsync(id, cancellationToken).ConfigureAwait(false);
         if (entity == null) return false;
 
-        db.TeamRecords.Remove(entity);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return true;
+        // Perform a direct SQL delete to bypass the DbContext audit rules that
+        // convert deletes into soft-deletes. Use parameterized SQL to avoid injection.
+        var sql = "DELETE FROM \"TeamRecords\" WHERE \"Id\" = @p0;";
+        var rows = await db.Database.ExecuteSqlRawAsync(sql, new object[] { id }, cancellationToken)
+            .ConfigureAwait(false);
+        return rows > 0;
     }
 
     public async Task<TeamRecord?> GetAsync(int id, CancellationToken cancellationToken = default)
@@ -158,12 +161,10 @@ public class TeamRecordRepository(IDbContextFactory<TeamSearchDbContext> factory
     public async Task<int> PurgeAllSoftDeletedAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await _factory.CreateDbContextAsync(cancellationToken);
-        var deleted = await db.TeamRecordsWithDeleted().Where(t => t.IsDeleted).ToListAsync(cancellationToken)
+        // Use a direct SQL DELETE to permanently remove soft-deleted rows.
+        var rows = await db.Database
+            .ExecuteSqlRawAsync("DELETE FROM \"TeamRecords\" WHERE \"IsDeleted\" = 1;", cancellationToken)
             .ConfigureAwait(false);
-        if (deleted.Count == 0) return 0;
-
-        db.TeamRecords.RemoveRange(deleted);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return deleted.Count;
+        return rows;
     }
 }

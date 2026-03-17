@@ -9,7 +9,12 @@
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0"/>
         <PackageReference Include="xunit" Version="2.6.3"/>
         <PackageReference Include="xunit.runner.visualstudio" Version="2.8.0"/>
-        <PackageReference Include="coverlet.collector" Version="6.0.0"/>
+        <PackageReference Include="coverlet.collector" Version="6.0.1"/>
+        <PackageReference Include="Moq" Version="4.20.72"/>
+        <PackageReference Include="FluentAssertions" Version="6.8.0"/>
+        <PackageReference Include="CsvHelper" Version="33.1.0"/>
+        <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.0"/>
+        <PackageReference Include="System.Net.Http.Json" Version="8.0.1"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -17,6 +22,8 @@
         <ProjectReference Include="..\TeamSearch.Domain\TeamSearch.Domain.csproj"/>
         <ProjectReference Include="..\TeamSearch.Application\TeamSearch.Application.csproj"/>
         <ProjectReference Include="..\TeamSearch.Infrastructure\TeamSearch.Infrastructure.csproj"/>
+        <ProjectReference Include="..\TeamSearch.Seeder\TeamSearch.Seeder.csproj"/>
+        <ProjectReference Include="..\TeamSearch.Server\TeamSearch.Server.csproj"/>
     </ItemGroup>
 
 </Project>

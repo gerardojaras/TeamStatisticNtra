@@ -1,0 +1,12 @@
+<!-- AppHeader is a simple named wrapper component so we don't collide with the Fluent UI library's FluentHeader tag -->
+<FluentHeader>
+    @ChildContent
+</FluentHeader>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
+
+
+
+

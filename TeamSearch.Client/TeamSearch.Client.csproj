@@ -24,8 +24,4 @@
         <_ContentIncludedByDefault Remove="Components\disabled\LocalFluentDataGrid.razor"/>
     </ItemGroup>
 
-    <ItemGroup>
-        <Folder Include="Components\"/>
-    </ItemGroup>
-
 </Project>
