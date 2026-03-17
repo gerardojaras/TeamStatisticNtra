@@ -95,37 +95,6 @@ dotnet publish ./TeamSearch.Client -c Release -o ./publish/client
 # then copy the publish contents into TeamSearch.Server/wwwroot or configure CI
 ```
 
-## Preflight / health check
-
-PowerShell (single check):
-
-```powershell
-$uri = 'https://localhost:7216/'
-try {
-    Invoke-RestMethod -Uri $uri -TimeoutSec 5 | Out-Null
-    Write-Host 'API is reachable'
-} catch {
-    Write-Host 'API not reachable. Start the backend first.'; exit 1
-}
-```
-
-PowerShell (poll until ready — retries for up to ~30 seconds):
-
-```powershell
-$uri = 'https://localhost:7216/'
-$maxAttempts = 30
-for ($i = 0; $i -lt $maxAttempts; $i++) {
-    try {
-        Invoke-RestMethod -Uri $uri -TimeoutSec 5 | Out-Null
-        Write-Host "API is up after $i seconds"
-        exit 0
-    } catch {
-        Start-Sleep -Seconds 1
-    }
-}
-Write-Host "API not responding after $maxAttempts seconds"; exit 1
-```
-
 ## launchSettings (pre-configured)
 
 - `./TeamSearch.Server/Properties/launchSettings.json` — `https` profile: https://localhost:7216 (also listens on http://localhost:5149)
