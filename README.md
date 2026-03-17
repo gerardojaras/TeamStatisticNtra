@@ -125,6 +125,14 @@ Notes:
   dotnet run --launch-profile https
   ```
 
+Behavior note: by default the bootstrap script will attempt to create an EF Core migration (timestamped) in `TeamSearch.Infrastructure` and then run `dotnet ef database update` before starting the server so the database is up-to-date. If you do not want to create or apply migrations automatically, run the script with `-CreateMigration:$false`.
+
+Example disabling migration creation:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\dev-bootstrap.ps1 -CreateMigration:$false
+```
+
 ## Restore
 
 From the repository root (where this README lives):
@@ -164,6 +172,67 @@ dotnet ef database update --project ./TeamSearch.Infrastructure --startup-projec
   - Add `--dry-run` or `-n` to simulate without applying migrations or writing data.
 
 The seeder opens a shared SQLite connection, sets PRAGMA options (busy_timeout and WAL), migrates (unless dry-run), and upserts records.
+
+## Manual full flow — create migration, update DB, run server, run client, open URL
+
+If you prefer to run each step manually (recommended when you want explicit control over migrations), follow these steps from the repository root. All commands are PowerShell examples and use relative project paths.
+
+Prerequisites:
+
+- Ensure `dotnet-ef` is installed (`dotnet tool install --global dotnet-ef`) or run EF commands via dotnet CLI as appropriate.
+- Trust the dev HTTPS certificate if needed: `dotnet dev-certs https --trust`.
+
+1) Create an EF Core migration (timestamped name)
+
+This creates a migration in the `TeamSearch.Infrastructure` project using `TeamSearch.Server` as the startup project.
+
+```powershell
+# Create a timestamped migration name
+$ts = (Get-Date -Format yyyyMMddHHmmss)
+$name = "Manual_$ts"
+
+dotnet ef migrations add $name --project ./TeamSearch.Infrastructure --startup-project ./TeamSearch.Server
+```
+
+Notes:
+- If there are no model changes, `dotnet ef migrations add` will indicate that nothing changed; you can safely skip migration creation.
+- If you prefer a fixed name, replace `$name` with a literal string.
+
+2) Apply migrations to the database
+
+```powershell
+dotnet ef database update --project ./TeamSearch.Infrastructure --startup-project ./TeamSearch.Server
+```
+
+3) Run the backend server (start first)
+
+Open a terminal and run:
+
+```powershell
+cd ./TeamSearch.Server
+dotnet run --launch-profile https
+```
+
+4) Run the Blazor client (in a separate terminal)
+
+```powershell
+cd ./TeamSearch.Client
+dotnet run --launch-profile https
+```
+
+5) Open the application URL in your browser
+
+The server `https` launch profile typically exposes the API and the host page at `https://localhost:7216/`. From PowerShell you can open it directly:
+
+```powershell
+Start-Process 'https://localhost:7216/'
+```
+
+Tips and alternatives
+
+- If you only want to update the DB without creating a migration, skip step (1) and run the `dotnet ef database update` command in step (2).
+- If you prefer to run the server and automatically publish the client into its `wwwroot`, run a `dotnet publish` for the client and copy the files into the server's `wwwroot` (or configure your CI to do so).
+- If you use the included `dev-bootstrap.ps1` script, it performs a similar sequence by default (it attempts to create a migration, runs `database update`, then starts the server and client). Use `-CreateMigration:$false` to disable migration creation and let the script only update and run.
 
 ## Run the application
 
