@@ -12,7 +12,7 @@ using TeamSearch.Seeder;
 using TeamSearch.Shared.Dtos;
 
 var host = Host.CreateDefaultBuilder(args)
-    .ConfigureLogging((ctx, logging) =>
+    .ConfigureLogging((_, logging) =>
     {
         // Reduce log noise so seeder runs silently for normal operation
         logging.ClearProviders();
@@ -47,17 +47,21 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .Build();
 
+// Start the host so hosted services, logging and the DI container are properly initialized.
+// This ensures StopAsync/Dispose will clean up resources and the process can exit.
+await host.StartAsync();
+
 try
 {
     using var scope = host.Services.CreateScope();
     var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<TeamSearchDbContext>>();
     await using var db = dbFactory.CreateDbContext();
 
-    var argList = args?.ToList() ?? new List<string>();
+    var argList = args.ToList();
     var dryRun = argList.Contains("--dry-run") || argList.Contains("-n");
-    var positional = argList.Where(a => !a.StartsWith("-"));
-    var csvPath = positional.ElementAtOrDefault(0) ?? "data/CollegeFootballTeamWinsWithMascots.csv";
-    var importerUserId = positional.ElementAtOrDefault(1) ?? "seeder";
+    var positionalList = argList.Where(a => !a.StartsWith("-")).ToList();
+    var csvPath = positionalList.ElementAtOrDefault(0) ?? "data/CollegeFootballTeamWinsWithMascots.csv";
+    var importerUserId = positionalList.ElementAtOrDefault(1) ?? "seeder";
 
     if (!dryRun) await db.Database.MigrateAsync();
 
@@ -146,11 +150,30 @@ finally
 {
     try
     {
-        await host.StopAsync();
+        // Attempt a graceful stop but don't wait forever — use a small timeout.
+        var stopTask = host.StopAsync();
+        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5));
+        var completed = await Task.WhenAny(stopTask, timeoutTask);
+        if (completed != stopTask)
+        {
+            // StopAsync timed out; force dispose and exit to avoid hanging the process.
+            host.Dispose();
+            Environment.Exit(Environment.ExitCode);
+        }
+        // If StopAsync completed, ensure any exceptions are observed.
+        await stopTask;
     }
-    catch { }
-    host.Dispose();
-    // Ensure process exits immediately after cleanup
-    Environment.Exit(Environment.ExitCode);
+    catch (Exception ex)
+    {
+        // Log to debug so any exception is observable without printing to standard output.
+        System.Diagnostics.Debug.WriteLine($"Exception while stopping host: {ex}");
+        try { host.Dispose(); } catch (Exception dex) { System.Diagnostics.Debug.WriteLine($"Dispose failed: {dex}"); }
+        Environment.Exit(Environment.ExitCode);
+    }
+    finally
+    {
+        try { host.Dispose(); } catch (Exception dex) { System.Diagnostics.Debug.WriteLine($"Dispose failed in finally: {dex}"); }
+        Environment.Exit(Environment.ExitCode);
+    }
 }
 

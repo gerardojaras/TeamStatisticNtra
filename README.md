@@ -101,6 +101,30 @@ This project uses Blazor (WebAssembly for the client and ASP.NET Core for the se
 
 Caveats (brief): Blazor WebAssembly apps have an initial payload cost; for public-facing sites you may consider server prerendering or hosting strategies. For internal tools or small apps the developer productivity and reduced maintenance overhead often outweigh the runtime trade-offs.
 
+## Dev bootstrap script
+
+A small convenience script `dev-bootstrap.ps1` is included at the repository root. It starts the backend server, polls the API until it responds, then starts the Blazor client in a new window so you get logs for both processes.
+
+Quick usage (from the repository root):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\dev-bootstrap.ps1
+```
+
+Example with options (health endpoint and shorter timeout):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\dev-bootstrap.ps1 -ApiUrl 'https://localhost:7216/health' -MaxAttempts 30
+```
+
+Notes:
+- Trust the HTTPS dev certificate before running if needed: `dotnet dev-certs https --trust`.
+- If the script times out, inspect the server window started by the script or run the server manually:
+  ```powershell
+  cd ./TeamSearch.Server
+  dotnet run --launch-profile https
+  ```
+
 ## Restore
 
 From the repository root (where this README lives):
@@ -143,6 +167,8 @@ The seeder opens a shared SQLite connection, sets PRAGMA options (busy_timeout a
 
 ## Run the application
 
+Important: start the backend server first. The client expects the API to be available at the configured `ApiBaseUrl` (defaults to `https://localhost:7216/` in Development). Start the server before starting the front-end to avoid connection errors.
+
 Start the server (recommended) which serves the API and the client:
 
 ```powershell
@@ -156,6 +182,110 @@ Or run the client separately (if desired):
 cd ./TeamSearch.Client
 dotnet run --launch-profile https
 ```
+
+Frontend (client) — run & dev workflow
+
+Note: make sure the backend server is running before starting the client. If the API is not available the client will fail to fetch data and may show errors while loading.
+
+If you want to run or develop the front-end independently, use the steps below. The client is a Blazor WebAssembly app and can run its own dev server or be hosted by the server project.
+
+- Run the client in development mode (simple):
+
+```powershell
+cd ./TeamSearch.Client
+dotnet run --launch-profile https
+```
+
+- Run the client with file-watch for fast edit-reload:
+
+```powershell
+cd ./TeamSearch.Client
+dotnet watch run --launch-profile https
+```
+
+- Run the client standalone while the API server runs separately (recommended for local dev):
+
+1. Start the server (from repo root or server folder):
+
+```powershell
+cd ./TeamSearch.Server
+dotnet run --launch-profile https
+```
+
+2. In a separate terminal start the client dev server:
+
+```powershell
+cd ./TeamSearch.Client
+dotnet run --launch-profile https
+```
+
+Make sure the API base URL is set correctly (the client defaults to `https://localhost:7216/` in Development). To override it when running the client alone:
+
+```powershell
+$env:ApiBaseUrl = 'https://localhost:7216/'
+dotnet run --project ./TeamSearch.Client --launch-profile https
+```
+
+- Publish the client for production (static assets):
+
+```powershell
+dotnet publish ./TeamSearch.Client -c Release -o ./publish/client
+```
+
+You can then serve the generated files from a static host or copy them into the server's `wwwroot` for hosting by the API project.
+
+Troubleshooting (common client issues)
+
+- CORS: when running client and server separately, the server allows the local dev origin `https://localhost:7114` by default. If you changed ports, update the CORS policy in `TeamSearch.Server/Program.cs` or set `ApiBaseUrl` accordingly.
+- HTTPS dev cert: if the browser blocks the local HTTPS dev certificate, run:
+
+```powershell
+dotnet dev-certs https --trust
+```
+
+- API unreachable: verify `ApiBaseUrl` in environment or that the server is running and listening on the profile URL (see `launchSettings.json`).
+
+Preflight / health check (verify backend is up)
+
+Before starting the front-end, you can run a quick preflight check to confirm the backend API is responding. Use the examples below.
+
+PowerShell (single check):
+
+```powershell
+$uri = 'https://localhost:7216/'
+try {
+    Invoke-RestMethod -Uri $uri -TimeoutSec 5 | Out-Null
+    Write-Host 'API is reachable'
+} catch {
+    Write-Host 'API not reachable. Start the backend first.'; exit 1
+}
+```
+
+PowerShell (poll until ready — retries for up to ~30 seconds):
+
+```powershell
+$uri = 'https://localhost:7216/'
+$maxAttempts = 30
+for ($i = 0; $i -lt $maxAttempts; $i++) {
+    try {
+        Invoke-RestMethod -Uri $uri -TimeoutSec 5 | Out-Null
+        Write-Host "API is up after $i seconds"
+        exit 0
+    } catch {
+        Start-Sleep -Seconds 1
+    }
+}
+Write-Host "API not responding after $maxAttempts seconds"; exit 1
+```
+
+curl (platform-agnostic single check):
+
+```bash
+curl -fsS --max-time 5 https://localhost:7216/ >/dev/null && echo "API is reachable" || echo "API not reachable"
+```
+
+If your server exposes a dedicated health endpoint (e.g., `/health` or `/healthz`) prefer using that URL for the checks.
+
 
 ## launchSettings (pre-configured)
 
