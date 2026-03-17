@@ -27,5 +27,6 @@ builder.Services.AddFluentUIComponents();
 
 // Register the frontend client service that calls the API and provides debounce behavior
 builder.Services.AddScoped<ITeamRecordClient, TeamRecordClientService>();
+builder.Services.AddScoped<ITeamRecordPresentationService, TeamRecordPresentationService>();
 
 await builder.Build().RunAsync();

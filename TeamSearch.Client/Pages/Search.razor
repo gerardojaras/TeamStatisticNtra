@@ -3,6 +3,7 @@
 @using TeamSearch.Client.Services
 @using TeamSearch.Shared.Dtos
 @inject ITeamRecordClient TeamClient
+@inject ITeamRecordPresentationService PresentationService
 
 <h3>Team Records Search</h3>
 
@@ -53,9 +54,9 @@ else
             @foreach (var key in VisibleColumnKeys)
             {
                 var colKey = key; // capture for closure
-                <TemplateColumn Title="@_allColumns[colKey]"
-                                SortBy="@GetSortExpression(colKey)">
-                    @GetColumnString(context, colKey)
+                <TemplateColumn Title="@PresentationService.AllColumns[colKey]"
+                                SortBy="@PresentationService.GetSortExpression(colKey)">
+                    @PresentationService.GetColumnString(context, colKey)
                 </TemplateColumn>
             }
         </FluentDataGrid>
@@ -72,24 +73,6 @@ else
     private string? SortBy { get; set; }
     private string SortDir { get; set; } = "asc";
 
-    private static readonly string[] DefaultSelectedColumns =
-        ["Id", "Team", "Mascot", "Wins", "WinningPercentage", "CreatedAt"];
-
-    private readonly Dictionary<string, string> _allColumns = new()
-    {
-        ["Id"] = "ID",
-        ["Rank"] = "Rank",
-        ["Team"] = "Team",
-        ["Mascot"] = "Mascot",
-        ["DateOfLastWin"] = "Date of Last Win",
-        ["WinningPercentage"] = "Winning %",
-        ["Wins"] = "Wins",
-        ["Losses"] = "Losses",
-        ["Ties"] = "Ties",
-        ["Games"] = "Games",
-        ["CreatedAt"] = "Created At"
-    };
-
     private HashSet<string> SelectedColumns { get; set; } = new();
 
     private List<KeyValuePair<string, string>> SortByOptions { get; set; } = new();
@@ -101,16 +84,16 @@ else
 
     protected override void OnInitialized()
     {
-        SelectedColumns = new HashSet<string>(DefaultSelectedColumns);
+        SelectedColumns = new HashSet<string>(PresentationService.DefaultSelectedColumns);
         SortByOptions = new List<KeyValuePair<string, string>>
         {
             new(string.Empty, "(none)")
         };
-        SortByOptions.AddRange(_allColumns);
+        SortByOptions.AddRange(PresentationService.AllColumns);
         SortBySelectedOption = SortByOptions.First();
     }
 
-    IEnumerable<string> VisibleColumnKeys => _allColumns.Keys.Where(c => SelectedColumns.Contains(c));
+    IEnumerable<string> VisibleColumnKeys => PresentationService.AllColumns.Keys.Where(c => SelectedColumns.Contains(c));
 
     private Task OnSearchValueChanged(string? value)
     {
@@ -151,44 +134,6 @@ else
         catch (TaskCanceledException)
         {
         }
-    }
-
-    string GetColumnString(TeamRecordDto r, string col)
-    {
-        return col switch
-        {
-            "Id" => r.Id.ToString(),
-            "Rank" => r.Rank?.ToString() ?? string.Empty,
-            "Team" => r.Team,
-            "Mascot" => r.Mascot ?? string.Empty,
-            "DateOfLastWin" => r.DateOfLastWin?.ToString("yyyy-MM-dd") ?? string.Empty,
-            "WinningPercentage" => r.WinningPercentage?.ToString() ?? string.Empty,
-            "Wins" => r.Wins?.ToString() ?? string.Empty,
-            "Losses" => r.Losses?.ToString() ?? string.Empty,
-            "Ties" => r.Ties?.ToString() ?? string.Empty,
-            "Games" => r.Games?.ToString() ?? string.Empty,
-            "CreatedAt" => r.CreatedAt.ToString("yyyy-MM-dd"),
-            _ => string.Empty
-        };
-    }
-
-    private GridSort<TeamRecordDto>? GetSortExpression(string col)
-    {
-        return col switch
-        {
-            "Id" => GridSort<TeamRecordDto>.ByAscending(x => x.Id),
-            "Rank" => GridSort<TeamRecordDto>.ByAscending(x => x.Rank),
-            "Team" => GridSort<TeamRecordDto>.ByAscending(x => x.Team),
-            "Mascot" => GridSort<TeamRecordDto>.ByAscending(x => x.Mascot),
-            "DateOfLastWin" => GridSort<TeamRecordDto>.ByAscending(x => x.DateOfLastWin),
-            "WinningPercentage" => GridSort<TeamRecordDto>.ByAscending(x => x.WinningPercentage),
-            "Wins" => GridSort<TeamRecordDto>.ByAscending(x => x.Wins),
-            "Losses" => GridSort<TeamRecordDto>.ByAscending(x => x.Losses),
-            "Ties" => GridSort<TeamRecordDto>.ByAscending(x => x.Ties),
-            "Games" => GridSort<TeamRecordDto>.ByAscending(x => x.Games),
-            "CreatedAt" => GridSort<TeamRecordDto>.ByAscending(x => x.CreatedAt),
-            _ => null
-        };
     }
 
     private async Task OnGridRefreshAsync(GridItemsProviderRequest<TeamRecordDto> request)
@@ -251,7 +196,7 @@ else
     {
         SearchText = string.Empty;
         Page = 1;
-        SelectedColumns = new HashSet<string>(DefaultSelectedColumns);
+        SelectedColumns = new HashSet<string>(PresentationService.DefaultSelectedColumns);
         SortBy = null;
         SortDir = "asc";
         SortBySelectedOption = SortByOptions.FirstOrDefault();
