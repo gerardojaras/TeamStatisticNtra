@@ -1,65 +1,76 @@
 ﻿using System.Globalization;
+using System.Diagnostics;
 using CsvHelper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using TeamSearch.Domain;
 using TeamSearch.Infrastructure;
+using TeamSearch.Infrastructure.Utilities;
 using TeamSearch.Seeder;
 using TeamSearch.Shared.Dtos;
 
-var host = Host.CreateDefaultBuilder(args)
-    .ConfigureLogging((_, logging) => { logging.ClearProviders(); logging.AddFilter("Microsoft", LogLevel.Warning); logging.AddFilter("System", LogLevel.Warning); })
-    .ConfigureServices((ctx, services) =>
-    {
-        var connectionString = ctx.Configuration.GetConnectionString("Default") ?? "Data Source=teamsearch.db";
-        connectionString = TeamSearch.Infrastructure.Utilities.SqliteConnectionStringResolver.Resolve(connectionString);
+var argList = args.ToList();
+var dryRun = argList.Contains("--dry-run") || argList.Contains("-n");
+var runMigrations = argList.Contains("--migrate");
+var positionalList = argList.Where(a => !a.StartsWith("-")).ToList();
+var csvPath = positionalList.ElementAtOrDefault(0) ?? "data/CollegeFootballTeamWinsWithMascots.csv";
+var importerUserId = positionalList.ElementAtOrDefault(1) ?? "seeder";
 
-        var sqliteConnection = new SqliteConnection(connectionString);
-        sqliteConnection.Open();
-        using var cmd = sqliteConnection.CreateCommand();
+var stopwatch = Stopwatch.StartNew();
+void Log(string message) => Console.WriteLine($"[{DateTime.UtcNow:HH:mm:ss.fff}] +{stopwatch.ElapsedMilliseconds}ms {message}");
+
+var processed = 0;
+var inserted = 0;
+var updated = 0;
+
+SqliteConnection? sqliteConnection = null;
+TeamSearchDbContext? db = null;
+
+var connectionString = SqliteConnectionStringResolver.Resolve("Data Source=teamsearch.db");
+
+try
+{
+    Log("Seeder start");
+
+    sqliteConnection = new SqliteConnection(connectionString);
+    sqliteConnection.Open();
+    using (var cmd = sqliteConnection.CreateCommand())
+    {
         cmd.CommandText = "PRAGMA busy_timeout = 200;";
         cmd.ExecuteNonQuery();
         cmd.CommandText = "PRAGMA journal_mode = WAL;";
         cmd.ExecuteNonQuery();
+    }
+    Log("SQLite connection open and PRAGMA configured");
 
-        services.AddSingleton(sqliteConnection);
-        services.AddDbContextFactory<TeamSearchDbContext>(options => options.UseSqlite(sqliteConnection, sql => sql.MigrationsAssembly("TeamSearch.Infrastructure")));
-    })
-    .Build();
+    var optionsBuilder = new DbContextOptionsBuilder<TeamSearchDbContext>();
+    optionsBuilder.UseSqlite(sqliteConnection, sql => sql.MigrationsAssembly("TeamSearch.Infrastructure"));
+    db = new TeamSearchDbContext(optionsBuilder.Options);
 
-try
-{
-    using var scope = host.Services.CreateScope();
-    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<TeamSearchDbContext>>();
-    await using var db = dbFactory.CreateDbContext();
-
-    var argList = args.ToList();
-    var dryRun = argList.Contains("--dry-run") || argList.Contains("-n");
-    var positionalList = argList.Where(a => !a.StartsWith("-")).ToList();
-    var csvPath = positionalList.ElementAtOrDefault(0) ?? "data/CollegeFootballTeamWinsWithMascots.csv";
-    var importerUserId = positionalList.ElementAtOrDefault(1) ?? "seeder";
-
-    if (!dryRun) await db.Database.MigrateAsync();
-
-    var processed = 0;
-    var inserted = 0;
-    var updated = 0;
+    if (!dryRun && runMigrations)
+    {
+        Log("Migration start");
+        await db.Database.MigrateAsync();
+        Log("Migration complete");
+    }
+    else
+    {
+        Log("Migration skipped (pass --migrate to enable)");
+    }
 
     using var reader = new StreamReader(csvPath);
     using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
     csv.Context.RegisterClassMap<CsvTeamRecordMap>();
     var records = csv.GetRecords<CsvTeamRecord>();
 
-    var autoDetect = db.ChangeTracker.AutoDetectChangesEnabled;
     db.ChangeTracker.AutoDetectChangesEnabled = false;
+    Log("CSV processing start");
 
     await foreach (var r in records.ToAsyncEnumerable())
     {
         processed++;
+        if (processed % 25 == 0) Log($"Processed {processed} records");
+
         if (dryRun)
         {
             inserted++;
@@ -102,21 +113,30 @@ try
         }
     }
 
+    Log("SaveChanges start");
     db.CurrentUserId = importerUserId;
     await db.SaveChangesAsync();
-    db.ChangeTracker.Clear();
-    db.ChangeTracker.AutoDetectChangesEnabled = autoDetect;
+    Log("SaveChanges complete");
 
-    if (dryRun) Console.WriteLine($"Dry run summary: processed={processed}, inserted={inserted}, updated={updated}");
     Environment.ExitCode = 0;
 }
-catch
+catch (Exception ex)
 {
+    Log($"ERROR: {ex.GetType().Name}: {ex.Message}");
     Environment.ExitCode = 1;
 }
 finally
 {
-    try { host.Dispose(); } catch { }
+    Console.WriteLine($"[SUMMARY] processed={processed}, inserted={inserted}, updated={updated}, dryRun={dryRun}");
+    Log("Disposal start");
+
+    if (db is not null) await db.DisposeAsync();
+    if (sqliteConnection is not null)
+    {
+        sqliteConnection.Close();
+        sqliteConnection.Dispose();
+    }
+
+    Log("Disposal complete; exiting");
     Environment.Exit(Environment.ExitCode);
 }
-
