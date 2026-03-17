@@ -76,6 +76,7 @@ public class TeamRecordClientService : ITeamRecordClient
             return ApiResponse<List<TeamRecordDto>>.Failure("unexpected_html",
                 $"Expected JSON from API but received HTML (status {(int)res.StatusCode}). Is the API server running at the same origin? Response begins: {content?.Trim().Substring(0, Math.Min(200, content.Length)).Replace("\n", " ")}");
         }
+
         var trimmed = content?.TrimStart();
         if (!string.IsNullOrEmpty(trimmed) && trimmed.StartsWith("<"))
         {
@@ -91,7 +92,8 @@ public class TeamRecordClientService : ITeamRecordClient
         ApiResponse<List<TeamRecordDto>>? apiResp = null;
         try
         {
-            apiResp = JsonSerializer.Deserialize<ApiResponse<List<TeamRecordDto>>>(content,
+            var contentJson = content ?? string.Empty;
+            apiResp = JsonSerializer.Deserialize<ApiResponse<List<TeamRecordDto>>>(contentJson,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         }
         catch (JsonException jex)
@@ -111,7 +113,7 @@ public class TeamRecordClientService : ITeamRecordClient
             $"Status {(int)res.StatusCode} {res.ReasonPhrase}");
     }
 
-    async Task<ApiResponse<List<TeamRecordDto>>?> TryFallbackCallAsync(string urlToTry, CancellationToken ct)
+    private async Task<ApiResponse<List<TeamRecordDto>>?> TryFallbackCallAsync(string urlToTry, CancellationToken ct)
     {
         try
         {
@@ -121,7 +123,9 @@ public class TeamRecordClientService : ITeamRecordClient
             var mt = r.Content.Headers.ContentType?.MediaType;
             if (!string.IsNullOrEmpty(mt) && mt.Contains("html", StringComparison.OrdinalIgnoreCase)) return null;
             if (!string.IsNullOrWhiteSpace(body?.TrimStart()) && body.TrimStart().StartsWith("<")) return null;
-            var parsed = JsonSerializer.Deserialize<ApiResponse<List<TeamRecordDto>>>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var bodyJson = body ?? string.Empty;
+            var parsed = JsonSerializer.Deserialize<ApiResponse<List<TeamRecordDto>>>(bodyJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             return parsed ?? ApiResponse<List<TeamRecordDto>>.Failure("invalid_response", body);
         }
         catch

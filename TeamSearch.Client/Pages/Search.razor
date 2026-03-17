@@ -1,132 +1,81 @@
 @page "/search"
+@page "/"
 @using TeamSearch.Client.Services
 @using TeamSearch.Shared.Dtos
 @inject ITeamRecordClient TeamClient
 
 <h3>Team Records Search</h3>
 
-<div class="mb-3">
-    <label class="form-label">Search</label>
-    <input class="form-control" value="@SearchText" @oninput="OnSearchInput"
-           placeholder="Enter search text (e.g. Ohio or Scarlet Knights)"/>
-</div>
+<div style="display:flex;flex-direction:column;gap:12px;max-width:900px;">
+    <FluentTextField Label="Search"
+                     Value="@SearchText"
+                     ValueChanged="OnSearchValueChanged"
+                     Placeholder="Enter search text (e.g. Ohio or Scarlet Knights)"/>
 
-<div class="row mb-3">
-    <div class="col-md-6">
-        <label class="form-label">Sort by</label>
-        <select class="form-select" @bind="SortBy">
-            <option value="">(none)</option>
-            @foreach (var kvp in AllColumns)
-            {
-                <option value="@kvp.Key">@kvp.Value</option>
-            }
-        </select>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+        <FluentSelect TOption="KeyValuePair<string, string>"
+                      Label="Sort by"
+                      Items="SortByOptions"
+                      OptionText="@(o => o.Value)"
+                      OptionValue="@(o => o.Key)"
+                      SelectedOption="SortBySelectedOption"
+                      SelectedOptionChanged="OnSortBySelectedOptionChanged" />
     </div>
-    <div class="col-md-3">
-        <label class="form-label">Direction</label>
-        <select class="form-select" @bind="SortDir">
-            <option value="asc">Ascending</option>
-            <option value="desc">Descending</option>
-        </select>
-    </div>
-    <div class="col-md-3 d-flex align-items-end">
-        <button class="btn btn-outline-secondary w-100" @onclick="ToggleSortDirection">Toggle Direction</button>
-    </div>
-</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
 
-<div class="mb-3">
-    <label class="form-label">Fields to return</label>
-    <div class="form-check" style="max-height:160px;overflow:auto;">
-        @foreach (var kvp in AllColumns)
-        {
-            <div>
-                <input class="form-check-input" type="checkbox" id="fld_@kvp.Key"
-                       checked="@SelectedColumns.Contains(kvp.Key)" @onclick="() => ToggleColumn(kvp.Key)"/>
-                <label class="form-check-label" for="fld_@kvp.Key">@kvp.Value</label>
-            </div>
-        }
+        <FluentSelect TOption="string" Label="Direction" Value="@SortDir" ValueChanged="OnSortDirChanged">
+            <FluentOption TOption="string" Value="asc">Ascending</FluentOption>
+            <FluentOption TOption="string" Value="desc">Descending</FluentOption>
+        </FluentSelect>
     </div>
-</div>
 
-<div class="mb-3">
-    <button class="btn btn-primary me-2" @onclick="() => PerformSearch()">Search</button>
-    <button class="btn btn-secondary" @onclick="Clear">Clear</button>
+    <div style="display:flex;gap:10px;">
+        <FluentButton Appearance="Appearance.Accent" @onclick="() => PerformSearch()">Search</FluentButton>
+        <FluentButton Appearance="Appearance.Neutral" @onclick="Clear">Clear</FluentButton>
+    </div>
 </div>
 
 @if (IsLoading)
 {
-    <div class="alert alert-info">Loading...</div>
+    <div style="margin-top:12px;">Loading...</div>
 }
 else if (ErrorMessage is not null)
 {
-    <div class="alert alert-danger">@ErrorMessage</div>
+    <div style="margin-top:12px;color:#b42318;">@ErrorMessage</div>
 }
 else
 {
-    <div>
-        <table class="table table-striped">
-            <thead>
-            <tr>
-                @foreach (var key in VisibleColumnKeys)
-                {
-                    <th style="cursor:pointer;user-select:none" @onclick="() => HeaderClicked(key)">
-                        @AllColumns[key]
-                        @if (SortBy == key)
-                        {
-                            <span> @(SortDir == "asc" ? "↑" : "↓")</span>
-                        }
-                    </th>
-                }
-            </tr>
-            </thead>
-            <tbody>
-            @if (Results?.Any() ?? false)
+    <div style="margin-top:14px;">
+        <FluentDataGrid TItem="TeamRecordDto"
+                        Items="@Results.AsQueryable()"
+                        Pageable="false"
+                        RefreshItems="OnGridRefreshAsync">
+            @foreach (var key in VisibleColumnKeys)
             {
-                foreach (var r in Results)
-                {
-                    <tr>
-                        @foreach (var key in VisibleColumnKeys)
-                        {
-                            <td>@GetColumnString(r, key)</td>
-                        }
-                    </tr>
-                }
+                var colKey = key; // capture for closure
+                <TemplateColumn Title="@_allColumns[colKey]"
+                                SortBy="@GetSortExpression(colKey)">
+                    @GetColumnString(context, colKey)
+                </TemplateColumn>
             }
-            else
-            {
-                <tr>
-                    <td colspan="@VisibleColumnKeys.Count()">No results</td>
-                </tr>
-            }
-            </tbody>
-        </table>
-
-        <div class="d-flex justify-content-between align-items-center">
-            <div>Showing @(Results?.Count() ?? 0) result(s)</div>
-            <div>
-                <button class="btn btn-light me-1" @onclick="() => PrevPage()" disabled="@(Page <= 1)">Prev</button>
-                <span class="mx-2">Page @Page</span>
-                <button class="btn btn-light" @onclick="() => NextPage()">Next</button>
-            </div>
-        </div>
+        </FluentDataGrid>
     </div>
 }
 
 @code {
-
     private CancellationTokenSource? _debounceCts;
 
-    // Query state
     private string? SearchText { get; set; }
     private int Page { get; set; } = 1;
     private int PageSize { get; } = 20;
 
-    // Sorting
     private string? SortBy { get; set; }
     private string SortDir { get; set; } = "asc";
 
-    // Columns & selection: key = property name, value = display name
-    private readonly Dictionary<string, string> AllColumns = new()
+    private static readonly string[] DefaultSelectedColumns =
+        ["Id", "Team", "Mascot", "Wins", "WinningPercentage", "CreatedAt"];
+
+    private readonly Dictionary<string, string> _allColumns = new()
     {
         ["Id"] = "ID",
         ["Rank"] = "Rank",
@@ -137,53 +86,56 @@ else
         ["Wins"] = "Wins",
         ["Losses"] = "Losses",
         ["Ties"] = "Ties",
-        ["Games"] = "Games"
+        ["Games"] = "Games",
+        ["CreatedAt"] = "Created At"
     };
 
     private HashSet<string> SelectedColumns { get; set; } = new();
 
-    // Results
-    private List<TeamRecordDto>? Results { get; set; }
+    private List<KeyValuePair<string, string>> SortByOptions { get; set; } = new();
+    private KeyValuePair<string, string> SortBySelectedOption { get; set; }
+
+    private List<TeamRecordDto> Results { get; set; } = [];
     private bool IsLoading { get; set; }
     private string? ErrorMessage { get; set; }
 
     protected override void OnInitialized()
     {
-        // default selected columns
-        SelectedColumns = new HashSet<string>(new[] { "Id", "Team", "Mascot", "Wins", "WinningPercentage", "CreatedAt" });
-    }
-
-    IEnumerable<string> VisibleColumnKeys => AllColumns.Keys.Where(c => SelectedColumns.Contains(c));
-
-    void ToggleColumn(string col)
-    {
-        if (SelectedColumns.Contains(col)) SelectedColumns.Remove(col);
-        else SelectedColumns.Add(col);
-    }
-
-    void ToggleSortDirection()
-    {
-        SortDir = SortDir == "asc" ? "desc" : "asc";
-    }
-
-    async Task HeaderClicked(string key)
-    {
-        if (SortBy == key)
+        SelectedColumns = new HashSet<string>(DefaultSelectedColumns);
+        SortByOptions = new List<KeyValuePair<string, string>>
         {
-            ToggleSortDirection();
-        }
-        else
-        {
-            SortBy = key;
-            SortDir = "asc";
-        }
+            new(string.Empty, "(none)")
+        };
+        SortByOptions.AddRange(_allColumns);
+        SortBySelectedOption = SortByOptions.First();
+    }
 
+    IEnumerable<string> VisibleColumnKeys => _allColumns.Keys.Where(c => SelectedColumns.Contains(c));
+
+    private Task OnSearchValueChanged(string? value)
+    {
+        var e = new ChangeEventArgs { Value = value };
+        return OnSearchInput(e);
+    }
+
+    private async Task OnSortBySelectedOptionChanged(KeyValuePair<string, string> selected)
+    {
+        SortBySelectedOption = selected;
+        SortBy = string.IsNullOrWhiteSpace(selected.Key) ? null : selected.Key;
+        Page = 1;
+        await PerformSearch();
+    }
+
+    private async Task OnSortDirChanged(string? value)
+    {
+        SortDir = value is "desc" ? "desc" : "asc";
+        Page = 1;
         await PerformSearch();
     }
 
     private async Task OnSearchInput(ChangeEventArgs e)
     {
-        SearchText = e?.Value?.ToString();
+        SearchText = e.Value?.ToString();
         _debounceCts?.Cancel();
         _debounceCts = new CancellationTokenSource();
         var token = _debounceCts.Token;
@@ -216,14 +168,50 @@ else
             "Ties" => r.Ties?.ToString() ?? string.Empty,
             "Games" => r.Games?.ToString() ?? string.Empty,
             "CreatedAt" => r.CreatedAt.ToString("yyyy-MM-dd"),
-            "CreatedBy" => r.CreatedBy ?? string.Empty,
-            "LastModifiedAt" => r.LastModifiedAt?.ToString("yyyy-MM-dd") ?? string.Empty,
-            "LastModifiedBy" => r.LastModifiedBy ?? string.Empty,
-            "IsDeleted" => r.IsDeleted ? "Yes" : "No",
-            "DeletedAt" => r.DeletedAt?.ToString("yyyy-MM-dd") ?? string.Empty,
-            "DeletedBy" => r.DeletedBy ?? string.Empty,
             _ => string.Empty
         };
+    }
+
+    private GridSort<TeamRecordDto>? GetSortExpression(string col)
+    {
+        return col switch
+        {
+            "Id" => GridSort<TeamRecordDto>.ByAscending(x => x.Id),
+            "Rank" => GridSort<TeamRecordDto>.ByAscending(x => x.Rank),
+            "Team" => GridSort<TeamRecordDto>.ByAscending(x => x.Team),
+            "Mascot" => GridSort<TeamRecordDto>.ByAscending(x => x.Mascot),
+            "DateOfLastWin" => GridSort<TeamRecordDto>.ByAscending(x => x.DateOfLastWin),
+            "WinningPercentage" => GridSort<TeamRecordDto>.ByAscending(x => x.WinningPercentage),
+            "Wins" => GridSort<TeamRecordDto>.ByAscending(x => x.Wins),
+            "Losses" => GridSort<TeamRecordDto>.ByAscending(x => x.Losses),
+            "Ties" => GridSort<TeamRecordDto>.ByAscending(x => x.Ties),
+            "Games" => GridSort<TeamRecordDto>.ByAscending(x => x.Games),
+            "CreatedAt" => GridSort<TeamRecordDto>.ByAscending(x => x.CreatedAt),
+            _ => null
+        };
+    }
+
+    private async Task OnGridRefreshAsync(GridItemsProviderRequest<TeamRecordDto> request)
+    {
+        var sorted = request.GetSortByProperties().FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(sorted.PropertyName))
+        {
+            SortBy = sorted.PropertyName;
+            SortDir = sorted.Direction == SortDirection.Descending ? "desc" : "asc";
+
+            var matched = SortByOptions.FirstOrDefault(o => o.Key == SortBy);
+            if (!string.IsNullOrWhiteSpace(matched.Key) || SortBy == string.Empty)
+            {
+                SortBySelectedOption = matched;
+            }
+        }
+
+        if (request.Count is > 0)
+        {
+            Page = request.StartIndex / request.Count.Value + 1;
+        }
+
+        await PerformSearch(request.CancellationToken);
     }
 
     async Task PerformSearch(CancellationToken cancellationToken = default)
@@ -237,21 +225,20 @@ else
             if (!apiResp.Success)
             {
                 ErrorMessage = apiResp.Error?.Message ?? "Unknown error";
-                Results = new List<TeamRecordDto>();
+                Results = [];
             }
             else
             {
-                Results = apiResp.Data ?? new List<TeamRecordDto>();
+                Results = apiResp.Data ?? [];
             }
         }
         catch (OperationCanceledException)
         {
-            /* ignore */
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
-            Results = new List<TeamRecordDto>();
+            Results = [];
         }
         finally
         {
@@ -264,22 +251,12 @@ else
     {
         SearchText = string.Empty;
         Page = 1;
-        SelectedColumns = new HashSet<string>(new[] { "Id", "Team", "Mascot", "Wins", "WinningPercentage", "CreatedAt" });
+        SelectedColumns = new HashSet<string>(DefaultSelectedColumns);
         SortBy = null;
         SortDir = "asc";
-        Results = new List<TeamRecordDto>();
+        SortBySelectedOption = SortByOptions.FirstOrDefault();
+        Results = [];
     }
 
-    async Task NextPage()
-    {
-        Page++;
-        await PerformSearch();
-    }
-
-    async Task PrevPage()
-    {
-        if (Page > 1) Page--;
-        await PerformSearch();
-    }
 
 }
